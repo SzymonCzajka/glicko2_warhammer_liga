@@ -109,7 +109,7 @@ def save_rankings(filename, players, history, last_played, now):
                 'nick': nick,
                 'rating': round(player.getRating(), 2),
                 'rd': round(player.getRd(), 2),
-                'vol': round(player.vol, 8),
+                'vol': round(player.vol, 12),
                 'last_game': days_since
             })
         csvfile.write("#history\n")
