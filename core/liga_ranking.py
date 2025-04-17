@@ -1,6 +1,6 @@
 import csv
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from glicko2 import Player
 import os
 import glob
@@ -8,12 +8,11 @@ import glob
 # =============================
 # KONFIGURACJA STARTU LIGI I DEKOMPOZYCJI RANKINGU
 # =============================
-LEAGUE_START_DATE = datetime(2025, 3, 18, 0, 0)
-DECAY_THRESHOLD_DAYS = 7  # próg nieaktywności w dniach
-DECAY_PER_DAY = 5          # przyrost RD za każdy dzień powyżej progu
+LEAGUE_START_DATE = datetime(2025, 4, 14, 0, 0)
+DECAY_PER_DAY = 5  # przyrost RD za kazdy pelny tydzien nieaktywnosci
 
 # =============================
-# Przeliczenie wyniku na proporcję Glicko2
+# Przeliczenie wyniku na proporcje Glicko2
 # =============================
 def determine_result(dp1, dp2):
     total = dp1 + dp2
@@ -37,15 +36,10 @@ def load_rankings(filename):
                 rd=float(row['rd']),
                 vol=float(row['vol'])
             )
-            try:
-                days = int(row.get('last_game', '0'))
-                last_game_map[row['nick']] = LEAGUE_START_DATE + timedelta(days=days)
-            except:
-                last_game_map[row['nick']] = LEAGUE_START_DATE
-    return players, last_game_map
+    return players
 
 # =============================
-# Wczytaj historię meczów z pliku rankingowego
+# Wczytaj historie meczow z pliku rankingowego
 # =============================
 def load_history(filename):
     history = []
@@ -61,56 +55,49 @@ def load_history(filename):
     return history
 
 # =============================
-# Zastosuj decay RD jeśli gracz był nieaktywny
+# Zastosuj decay RD jesli gracz byl nieaktywny
 # =============================
 def apply_rd_decay(player, days_since_last_game):
-    if days_since_last_game > DECAY_THRESHOLD_DAYS:
-        decay_days = days_since_last_game - DECAY_THRESHOLD_DAYS
-        player.rd += DECAY_PER_DAY * decay_days
+    if days_since_last_game > 0:
+        weeks_missed = days_since_last_game // 7
+        player.rd += weeks_missed * DECAY_PER_DAY
 
 # =============================
-# Zapisz nowy ranking z historią i aktualnym stanem graczy
+# Pomocnicza: znajdz date ostatniego meczu gracza
 # =============================
-def save_rankings(filename, players, history, last_played, now):
+def get_last_game_date(nick, history):
+    relevant_dates = [
+        datetime.strptime(line.split(',')[0], '%Y-%m-%d %H:%M:%S')
+        for line in history
+        if nick in (line.split(',')[1], line.split(',')[2])
+    ]
+    return max(relevant_dates) if relevant_dates else LEAGUE_START_DATE
+
+# =============================
+# Zapisz nowy ranking z historia i aktualnym stanem graczy
+# =============================
+def save_rankings(filename, players, history, now):
+    decayed_players = set()
     timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
     out_filename = os.path.join("wyniki", f"ranking_{timestamp}.csv")
     with open(out_filename, 'w', newline='') as csvfile:
-        fieldnames = ['nick', 'rating', 'rd', 'vol', 'last_game']
+        fieldnames = ['nick', 'rating', 'rd', 'vol']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for nick, player in players.items():
-            last_game_date = last_played.get(nick)
-            if nick in (sys.argv[1], sys.argv[2]):
+            if nick in sys.argv[1:3]:
                 last_game_date = now
             else:
-                if not last_game_date:
-                    # Szukamy ostatniego meczu z udziałem gracza
-                    relevant_dates = [
-                        datetime.strptime(line.split(',')[0], '%Y-%m-%d %H:%M:%S')
-                        for line in history
-                        if nick in (line.split(',')[1], line.split(',')[2])
-                    ]
-                    if relevant_dates:
-                        last_game_date = max(relevant_dates)
-                    else:
-                        last_game_date = LEAGUE_START_DATE
-                relevant_dates = [
-                    datetime.strptime(line.split(',')[0], '%Y-%m-%d %H:%M:%S')
-                    for line in history
-                    if nick in (line.split(',')[1], line.split(',')[2])
-                ]
-                if relevant_dates:
-                    last_game_date = max(relevant_dates)
-                else:
-                    last_game_date = LEAGUE_START_DATE
+                last_game_date = get_last_game_date(nick, history)
             days_since = (now - last_game_date).days
-            apply_rd_decay(player, days_since)
+            if nick not in decayed_players:
+                apply_rd_decay(player, days_since)
+                decayed_players.add(nick)
             writer.writerow({
                 'nick': nick,
                 'rating': round(player.getRating(), 2),
                 'rd': round(player.getRd(), 2),
-                'vol': round(player.vol, 12),
-                'last_game': days_since
+                'vol': round(player.vol, 15)
             })
         csvfile.write("#history\n")
         for line in history:
@@ -119,7 +106,7 @@ def save_rankings(filename, players, history, last_played, now):
     return out_filename
 
 # =============================
-# Znajdź najnowszy plik rankingowy
+# Znajdz najnowszy plik rankingowy
 # =============================
 def get_latest_ranking_file():
     ranking_files = glob.glob("wyniki/ranking_*.csv")
@@ -129,36 +116,30 @@ def get_latest_ranking_file():
     return ranking_files[0]
 
 # =============================
-# Główna funkcja programu
+# Glowna funkcja programu
 # =============================
 def main():
     if len(sys.argv) != 7:
-        print(f"Użycie: python {sys.argv[0]} gracz1 gracz2 dp1 dp2 mp1 mp2")
+        print(f"Uzycie: python {sys.argv[0]} gracz1 gracz2 dp1 dp2 mp1 mp2")
         return
 
     nick1, nick2 = sys.argv[1], sys.argv[2]
     dp1, dp2 = int(sys.argv[3]), int(sys.argv[4])
     mp1, mp2 = int(sys.argv[5]), int(sys.argv[6])
 
-    # Walidacja dużych punktów
     if not (0 <= dp1 <= 20 and 0 <= dp2 <= 20):
-        raise ValueError(f"Błąd: duże punkty muszą być w zakresie 0–20. Otrzymano: {dp1}-{dp2} ({nick1} vs {nick2})")
+        raise ValueError(f"Blad: duze punkty musza byc w zakresie 0–20. Otrzymano: {dp1}-{dp2} ({nick1} vs {nick2})")
     if dp1 + dp2 > 20:
-        raise ValueError(f"Błąd: suma dużych punktów nie może przekraczać 20. Otrzymano: {dp1 + dp2} ({nick1} vs {nick2})")
+        raise ValueError(f"Blad: suma duzych punktow nie moze przekraczac 20. Otrzymano: {dp1 + dp2} ({nick1} vs {nick2})")
 
     filename = get_latest_ranking_file()
     if not os.path.exists(filename):
         print(f"Plik {filename} nie istnieje.")
         return
 
-    players, last_played = load_rankings(filename)
+    players = load_rankings(filename)
     history = load_history(filename)
-
     now = datetime.now()
-
-    # Zaktualizuj datę ostatniej gry dla graczy meczu
-    last_played[nick1] = now
-    last_played[nick2] = now
 
     if nick1 not in players or nick2 not in players:
         print("Nie znaleziono jednego z graczy w rankingu.")
@@ -183,11 +164,10 @@ def main():
     new_entry = f"{timestamp},{nick1},{nick2},{dp1},{dp2},{mp1},{mp2}"
     history.append(new_entry)
 
-    output_file = save_rankings(filename, players, history, last_played, now)
+    output_file = save_rankings(filename, players, history, now)
 
-    print(f"Zarejestrowano grę pomiędzy {nick1} i {nick2} z wynikiem {dp1}-{dp2}.")
-    print(f"{nick1} zdobywa {diff1} punktów rankingowych, {nick2} zdobywa {diff2}.")
+    print(f"Zarejestrowano gre pomiedzy {nick1} i {nick2} z wynikiem {dp1}-{dp2}.")
+    print(f"{nick1} zdobywa {diff1} punktow rankingowych, {nick2} zdobywa {diff2}.")
 
 if __name__ == '__main__':
-    from datetime import timedelta
     main()
