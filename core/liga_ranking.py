@@ -9,7 +9,7 @@ import glob
 # KONFIGURACJA STARTU LIGI I DEKOMPOZYCJI RANKINGU
 # =============================
 LEAGUE_START_DATE = datetime(2025, 4, 14, 0, 0)
-DECAY_PER_DAY = 5  # przyrost RD za kazdy pelny tydzien nieaktywnosci
+DECAY_PER_DAY = 0  # przyrost RD za kazdy pelny tydzien nieaktywnosci
 
 # =============================
 # Przeliczenie wyniku na proporcje Glicko2
