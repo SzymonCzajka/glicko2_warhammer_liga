@@ -1,0 +1,20 @@
+# ⛔ Ignoruj środowisko wirtualne
+.venv/
+venv/
+
+# ⛔ Ignoruj pliki tymczasowe Pythona
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ⛔ Ignoruj pliki edytorów/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ⛔ Ignoruj pliki backup/tymczasowe
+*~
+*.bak
+.DS_Store
