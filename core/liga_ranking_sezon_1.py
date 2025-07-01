@@ -1,7 +1,7 @@
 import csv
 import sys
 from datetime import datetime, timedelta
-from glicko2 import Player
+from glicko2symulacja import Player
 import os
 import glob
 

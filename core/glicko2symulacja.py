@@ -1,11 +1,12 @@
 import math
 
 class Player:
-    def __init__(self, rating=1500, rd=350, vol=0.06):
+    def __init__(self, rating=1500, rd=250, vol=0.06, tau=0.005, min_rd=130):
         self.rating = rating
         self.rd = rd
         self.vol = vol
-        self._tau = 0.5
+        self.tau = tau
+        self.min_rd = min_rd
         self._epsilon = 0.000001
 
     def getRating(self):
@@ -42,9 +43,9 @@ class Player:
             B = math.log(delta ** 2 - self.rd ** 2 - v)
         else:
             k = 1
-            while self._f(a - k * self._tau, delta, v, a) < 0:
+            while self._f(a - k * self.tau, delta, v, a) < 0:
                 k += 1
-            B = a - k * self._tau
+            B = a - k * self.tau
 
         fA = self._f(A, delta, v, a)
         fB = self._f(B, delta, v, a)
@@ -76,7 +77,8 @@ class Player:
         self.rating += (self.rd ** 2) * sum_term
 
     def _f(self, x, delta, v, a):
+        print(f"[DEBUG] tau użyte: {self.tau}")  # 👈
         ex = math.exp(x)
         num = ex * (delta ** 2 - self.rd ** 2 - v - ex)
         denom = 2 * (self.rd ** 2 + v + ex) ** 2
-        return (num / denom) - ((x - a) / (self._tau ** 2))
+        return (num / denom) - ((x - a) / (self.tau ** 2))
